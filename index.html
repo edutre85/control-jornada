@@ -100,7 +100,14 @@
   .day.abierto { border: 2px dashed var(--muted); }
   .day.festivo { color: var(--c-fest); border-color: var(--c-fest); }
   .day.libre { color: var(--muted); }
-  .day.falta { border: 2px solid var(--c-fest); color: var(--c-fest); background: transparent; }
+  .day.falta {
+    background: repeating-linear-gradient(45deg, #f6d5cf 0 6px, var(--surface) 6px 12px);
+    border: 2px dashed var(--c-fest); color: var(--c-fest);
+  }
+  .day.falta::after {
+    content: "!"; position: absolute; top: 3px; right: 3px; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--c-fest); color: #fff; font-size: 10px; line-height: 14px; text-align: center; font-weight: 700;
+  }
   .day.falta .s { font-weight: 600; }
   .day.festivo .n, .day.libre .n { font-weight: 500; }
 
@@ -241,7 +248,7 @@
         <span><i style="background:var(--c-fest)"></i>Fin de semana o festivo trabajado</span>
         <span><i style="background:var(--c-aus)"></i>Ausencia</span>
         <span><i style="border:2px dashed var(--muted)"></i>Sin cerrar</span>
-        <span><i style="border:2px solid var(--c-fest)"></i>Sin fichaje (horas no cumplidas)</span>
+        <span><i style="background:repeating-linear-gradient(45deg,#f6d5cf 0 3px,var(--surface) 3px 6px);border:2px dashed var(--c-fest)"></i>Horas no cumplidas</span>
       </div>
     </section>
 
@@ -610,7 +617,7 @@
       const r = regs.get(id);
       const c = clasificar(id, r, S);
       let cls = "", sub = "";
-      if (r && r.tipo === "falta") { cls = "falta"; sub = `−${hDec(STD)}`; }
+      if (c.cerrado && !c.ausencia && c.saldo < 0) { cls = "falta"; sub = `−${hDec(-c.saldo)} h`; }
       else if (r && r.tipo && r.tipo !== "trabajo") { cls = "aus"; sub = TIPOS_AUS[r.tipo][0]; }
       else if (c.abierto) { cls = "abierto"; }
       else if (c.cerrado) {

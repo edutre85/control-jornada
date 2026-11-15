@@ -3,33 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f4f3ef">
+<meta name="theme-color" content="#16181d">
 <title>Control de jornada</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
 <style>
+  /* Grafito con acento ámbar. Entrada (turquesa) y salida (rosa) no se usan en el calendario. */
   :root {
-    --bg: #f4f3ef; --surface: #ffffff; --fg: #1d1c1a; --muted: #6b675f; --line: #dedbd3;
-    --accent: #b8502a; --accent-fg: #ffffff;
-    --c-normal: #2d7a55; --c-extra: #d19a1c; --c-noct: #6b4fb5; --c-fest: #c0392b; --c-aus: #2f6fb0;
-    --neg: #b03a2a; --pos: #2d7a55;
-    color-scheme: light;
+    --bg: #16181d; --surface: #20232b; --surface2: #2a2e38; --fg: #e9ebf0; --muted: #9aa0ad; --line: #2c303a;
+    --accent: #f5b335; --accent-fg: #16181d;
+    --ent: #2ec4b6; --ent-fg: #06201d; --sal: #f472b6; --sal-fg: #2a0f1c;
+    --c-normal: #2f8f6b; --c-extra: #f5b335; --c-noct: #8d75d6; --c-fest: #c2412d; --c-aus: #3d6fd1;
+    --neg: #f08a73; --pos: #5fd3a0;
+    --falta-bg: #ffffff; --falta-stripe: #f6d5cf;
+    color-scheme: dark;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #15140f; --surface: #1f1e19; --fg: #f1eee7; --muted: #9c978a; --line: #33312a;
-      --accent: #e0743f; --accent-fg: #15140f;
-      --c-normal: #3f9d70; --c-extra: #e0b043; --c-noct: #8d75d6; --c-fest: #e0655a; --c-aus: #5d97d6;
-      --neg: #e27a68; --pos: #5fbf8c;
-      color-scheme: dark;
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f4f5f7; --surface: #ffffff; --surface2: #eceef2; --fg: #16181d; --muted: #5b6170; --line: #dfe2e8;
+      --accent: #c98a00; --accent-fg: #ffffff;
+      --ent: #14a394; --ent-fg: #ffffff; --sal: #d9488f; --sal-fg: #ffffff;
+      --c-normal: #2f8f6b; --c-extra: #d9a21b; --c-noct: #7a62c4; --c-fest: #c2412d; --c-aus: #3d6fd1;
+      --neg: #b8442f; --pos: #237a55;
+      color-scheme: light;
     }
   }
-  :root[data-theme="dark"] {
-    --bg: #15140f; --surface: #1f1e19; --fg: #f1eee7; --muted: #9c978a; --line: #33312a;
-    --accent: #e0743f; --accent-fg: #15140f;
-    --c-normal: #3f9d70; --c-extra: #e0b043; --c-noct: #8d75d6; --c-fest: #e0655a; --c-aus: #5d97d6;
-    --neg: #e27a68; --pos: #5fbf8c;
-    color-scheme: dark;
+  :root[data-theme="light"] {
+    --bg: #f4f5f7; --surface: #ffffff; --surface2: #eceef2; --fg: #16181d; --muted: #5b6170; --line: #dfe2e8;
+    --accent: #c98a00; --accent-fg: #ffffff;
+    --ent: #14a394; --ent-fg: #ffffff; --sal: #d9488f; --sal-fg: #ffffff;
+    --c-normal: #2f8f6b; --c-extra: #d9a21b; --c-noct: #7a62c4; --c-fest: #c2412d; --c-aus: #3d6fd1;
+    --neg: #b8442f; --pos: #237a55;
+    color-scheme: light;
   }
 
   body {
@@ -63,6 +68,10 @@
     border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer;
   }
   .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+  .btn.entrada { background: var(--ent); color: var(--ent-fg); border-color: transparent; }
+  .btn.salida { background: var(--sal); color: var(--sal-fg); border-color: transparent; }
+  .btn.pausa { background: var(--surface2); color: var(--fg); border-color: var(--line); }
+  .btn.entrada, .btn.salida, .btn.pausa { text-transform: uppercase; letter-spacing: .06em; font-size: 14px; }
   .btn.ghost { background: transparent; min-height: 40px; font-weight: 500; padding: 0 10px; }
   .btn.danger { color: var(--neg); }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
@@ -101,7 +110,7 @@
   .day.festivo { color: var(--c-fest); border-color: var(--c-fest); }
   .day.libre { color: var(--muted); }
   .day.falta {
-    background: repeating-linear-gradient(45deg, #f6d5cf 0 6px, var(--surface) 6px 12px);
+    background: repeating-linear-gradient(45deg, var(--falta-stripe) 0 6px, var(--falta-bg) 6px 12px);
     border: 2px dashed var(--c-fest); color: var(--c-fest);
   }
   .day.falta::after {
@@ -208,8 +217,8 @@
       <div class="now" id="ahora" style="margin-top:12px">--:--</div>
       <div class="status" id="estado" aria-live="polite"></div>
       <div class="actions">
-        <button class="btn primary" id="btn-principal" type="button" disabled>Entrar</button>
-        <button class="btn" id="btn-salir" type="button" disabled>Salir</button>
+        <button class="btn entrada" id="btn-principal" type="button" disabled>Entrada</button>
+        <button class="btn salida" id="btn-salir" type="button" disabled>Salida</button>
       </div>
       <button class="btn ghost" id="btn-corregir" type="button" style="margin-top:10px">Corregir hoy</button>
     </section>
@@ -248,7 +257,7 @@
         <span><i style="background:var(--c-fest)"></i>Fin de semana o festivo trabajado</span>
         <span><i style="background:var(--c-aus)"></i>Ausencia</span>
         <span><i style="border:2px dashed var(--muted)"></i>Sin cerrar</span>
-        <span><i style="background:repeating-linear-gradient(45deg,#f6d5cf 0 3px,var(--surface) 3px 6px);border:2px dashed var(--c-fest)"></i>Horas no cumplidas</span>
+        <span><i style="background:repeating-linear-gradient(45deg,var(--falta-stripe) 0 3px,var(--falta-bg) 3px 6px);border:2px dashed var(--c-fest)"></i>Horas no cumplidas</span>
       </div>
     </section>
 
@@ -553,31 +562,33 @@
     $("turno-hoy").textContent = laborable(hoy) ? `Turno ${etiqueta(turnoDe(hoy))}` : "Fin de semana o festivo";
 
     const p = $("btn-principal"), s = $("btn-salir"), est = $("estado");
+    p.className = "btn " + (op ? "pausa" : "entrada");
+    s.className = "btn salida";
     if (!S.jornadas.size && !uid) return;
 
     if (!op) {
       const hr = S.jornadas.get(hoy);
       if (hr && hr.tipo && hr.tipo !== "trabajo") {
-        p.textContent = "Entrar"; p.disabled = true;
+        p.textContent = "Entrada"; p.disabled = true;
         est.textContent = `Hoy tienes registrada una ${TIPOS_AUS[hr.tipo].toLowerCase()}.`;
       } else if (hr && hr.entrada && hr.salida) {
-        p.textContent = "Entrar"; p.disabled = true;
+        p.textContent = "Entrada"; p.disabled = true;
         est.innerHTML = `Jornada de hoy cerrada: <strong class="num">${hTxt(clasificar(hoy, hr, S).worked)}</strong>. Corrígela desde "Corregir hoy" si hace falta.`;
       } else {
-        p.textContent = "Entrar"; p.disabled = S.busy;
+        p.textContent = "Entrada"; p.disabled = S.busy;
         est.textContent = "Sin jornada abierta. Pulsa Entrar al empezar tu turno.";
       }
       s.disabled = true;
     } else if (enPausa) {
-      p.textContent = "Fin de pausa"; p.disabled = S.busy;
+      p.textContent = "Fin pausa"; p.disabled = S.busy;
       s.disabled = true;
       est.innerHTML = `En pausa desde <strong class="num">${r.pausaIni}</strong>.`;
     } else if (!r.pausaIni) {
-      p.textContent = "Pausa para comer"; p.disabled = S.busy;
+      p.textContent = "Pausa comida"; p.disabled = S.busy;
       s.disabled = S.busy;
       est.innerHTML = `En jornada desde <strong class="num">${r.entrada}</strong>${op !== hoy ? ` (${label(op)})` : ""}.`;
     } else {
-      p.textContent = "Entrar"; p.disabled = true;
+      p.textContent = "Entrada"; p.disabled = true;
       s.disabled = S.busy;
       est.innerHTML = `En jornada desde <strong class="num">${r.entrada}</strong>${op !== hoy ? ` (${label(op)})` : ""}. Pulsa Salir al terminar.`;
     }

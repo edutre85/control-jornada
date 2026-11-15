@@ -100,6 +100,8 @@
   .day.abierto { border: 2px dashed var(--muted); }
   .day.festivo { color: var(--c-fest); border-color: var(--c-fest); }
   .day.libre { color: var(--muted); }
+  .day.falta { border: 2px solid var(--c-fest); color: var(--c-fest); background: transparent; }
+  .day.falta .s { font-weight: 600; }
   .day.festivo .n, .day.libre .n { font-weight: 500; }
 
   .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 14px; font-size: 12px; color: var(--muted); }
@@ -120,7 +122,8 @@
     width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; min-width: 0;
     background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
   }
-  .row .d { font-weight: 600; text-transform: capitalize; }
+  .row .d { font-weight: 600; text-transform: capitalize; white-space: nowrap; }
+  .row .hx { white-space: nowrap; }
   .row .t { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
   .row .r { text-align: right; font-variant-numeric: tabular-nums; display: grid; gap: 2px; font-size: 13px; }
   .row .r .w { font-weight: 600; font-size: 15px; }
@@ -212,10 +215,10 @@
       <div class="sec-head" style="margin-top:12px">
         <span id="semana-turno" class="num"></span>
         <select class="sel" id="sel-turno" aria-label="Turno de esta semana">
-          <option value="auto">Automático (rotación)</option>
-          <option value="manana">Mañana 06:00–14:00</option>
-          <option value="tarde">Tarde 14:00–22:00</option>
-          <option value="partida">Partida 08:00–16:30</option>
+          <option value="auto">Automático</option>
+          <option value="manana">MAÑANAS 06:00–14:00</option>
+          <option value="tarde">TARDES 14:00–22:00</option>
+          <option value="partida">PARTIDO 08:00–16:30</option>
         </select>
       </div>
     </section>
@@ -238,6 +241,7 @@
         <span><i style="background:var(--c-fest)"></i>Fin de semana o festivo trabajado</span>
         <span><i style="background:var(--c-aus)"></i>Ausencia</span>
         <span><i style="border:2px dashed var(--muted)"></i>Sin cerrar</span>
+        <span><i style="border:2px solid var(--c-fest)"></i>Sin fichaje (horas no cumplidas)</span>
       </div>
     </section>
 
@@ -279,6 +283,17 @@
           <button class="btn danger" id="btn-restaurar" type="button">Restaurar copia</button>
           <button class="btn ghost" id="btn-restaurar-no" type="button">Cancelar</button>
         </div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="t-informe">
+      <div class="sec-head">
+        <h2 id="t-informe">Informe mensual en PDF</h2>
+      </div>
+      <p class="small muted" style="margin:10px 0 0">Genera el informe de un mes y lo guarda en la carpeta <strong>Informes mensuales - Control de jornada</strong> de tu Drive. Si ya existe ese mes, lo reemplaza.</p>
+      <div class="sec-head" style="margin-top:12px">
+        <input class="month" id="mes-informe" type="month" aria-label="Mes del informe">
+        <button class="btn primary" id="btn-informe" type="button">Generar PDF en Drive</button>
       </div>
     </section>
 
@@ -333,13 +348,40 @@
     <div class="dlg-actions">
       <button class="btn primary" type="submit">Guardar</button>
       <button class="btn" id="f-cancelar" type="button">Cancelar</button>
+      <button class="btn wide" id="f-motivo" type="button" hidden>Motivo de horas no cumplidas</button>
       <button class="btn danger wide" id="f-borrar" type="button" hidden>Borrar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-motivo" aria-labelledby="motivo-titulo">
+  <h2 id="motivo-titulo">Horas no cumplidas</h2>
+  <p class="small muted" id="motivo-resumen" style="margin:8px 0 0"></p>
+  <form class="form" id="form-motivo" novalidate>
+    <div class="field">
+      <label for="m-tipo">Motivo</label>
+      <select id="m-tipo">
+        <option value="">Elige un motivo</option>
+        <option>Médico</option>
+        <option>Asunto Propio</option>
+        <option>Otro</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="m-texto">Detalle</label>
+      <input id="m-texto" type="text" maxlength="200" placeholder="Explica brevemente qué ha pasado">
+    </div>
+    <div class="err" id="m-err" role="alert"></div>
+    <div class="dlg-actions">
+      <button class="btn primary" type="submit">Guardar motivo</button>
+      <button class="btn" id="m-cerrar" type="button">Más tarde</button>
     </div>
   </form>
 </dialog>
 
 <div class="toast" id="toast" role="status"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
@@ -369,7 +411,7 @@
     "2026-11-02","2026-12-06","2026-12-07","2026-12-08","2026-12-21","2026-12-22",
     "2026-12-23","2026-12-24","2026-12-25","2026-12-28","2026-12-29","2026-12-30","2026-12-31"
   ]);
-  const TIPOS_AUS = { vacaciones: "Vacaciones", permiso: "Permiso", baja: "Baja", otra: "Ausencia" };
+  const TIPOS_AUS = { vacaciones: "Vacaciones", permiso: "Permiso", baja: "Baja", otra: "Ausencia", falta: "Sin fichaje" };
 
   // ============ UTILIDADES ============
   const $ = id => document.getElementById(id);
@@ -386,7 +428,7 @@
     return `${s}${Math.floor(a / 60)} h ${pad(a % 60)} min`;
   };
   const hDec = min => (min / 60).toFixed(2).replace(".", ",");
-  const label = s => parseISO(s).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
+  const label = s => parseISO(s).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" }).replace(",", "");
   const esFin = s => { const w = parseISO(s).getDay(); return w === 0 || w === 6; };
   const esFestivo = s => FESTIVOS.has(s) || esFin(s);
   const laborable = s => !esFestivo(s);
@@ -412,6 +454,9 @@
     const c = { normal: 0, extra: 0, noct: 0, fest: 0, worked: 0, expected: 0, saldo: 0,
                 abierto: false, cerrado: false, ausencia: false };
     if (!r) return c;
+    if (r.tipo === "falta") { // día laborable sin fichaje ni ausencia: jornada no cumplida
+      c.cerrado = true; c.expected = laborable(id) ? STD : 0; c.saldo = -c.expected; return c;
+    }
     if (r.tipo && r.tipo !== "trabajo") { c.ausencia = true; c.cerrado = true; return c; }
     if (!r.entrada) return c;
     if (!r.salida) { c.abierto = true; return c; }
@@ -441,6 +486,25 @@
     c.expected = lab ? STD : 0;
     c.saldo = c.worked - c.expected;
     return c;
+  }
+
+  // Días laborables pasados, desde el primer registro, sin fichaje ni ausencia.
+  function diasFaltantes() {
+    if (!S.jornadas.size) return [];
+    const inicio = [...S.jornadas.keys()].sort()[0];
+    const hoy = todayISO();
+    const out = [];
+    for (let d = inicio; d < hoy; d = addDays(d, 1)) {
+      if (!S.jornadas.has(d) && laborable(d)) out.push(d);
+    }
+    return out;
+  }
+
+  // Registros reales más los días sin fichaje, marcados como "falta".
+  function registros() {
+    const m = new Map(S.jornadas);
+    for (const d of diasFaltantes()) m.set(d, { fecha: d, tipo: "falta" });
+    return m;
   }
 
   // ============ ESTADO ============
@@ -512,7 +576,7 @@
     }
   }
 
-  const etiqueta = t => ({ manana: "mañana", tarde: "tarde", partida: "partida" })[t] || "—";
+  const etiqueta = t => ({ manana: "MAÑANAS", tarde: "TARDES", partida: "PARTIDO" })[t] || "—";
   const turnoDe = s => S.semanas.get(mondayOf(s))?.turno || turnoBase(mondayOf(s));
 
   function renderTurno() {
@@ -521,7 +585,7 @@
     $("semana-rango").textContent = `${label(lunes)} – ${label(domingo)}`;
     const t = turnoDe(lunes);
     const ov = S.semanas.get(lunes)?.turno;
-    $("semana-turno").textContent = `${etiqueta(t)}${ov ? " (fijado)" : " (rotación)"}`;
+    $("semana-turno").textContent = `${etiqueta(t)}${ov ? " (fijado)" : ""}`;
     $("sel-turno").value = ov || "auto";
   }
 
@@ -537,15 +601,17 @@
     const offset = (first.getDay() + 6) % 7;
     const dias = new Date(y, m, 0).getDate();
     const hoy = todayISO();
+    const regs = registros();
     for (let i = 0; i < offset; i++) {
       const v = document.createElement("div"); v.className = "day void"; cal.append(v);
     }
     for (let d = 1; d <= dias; d++) {
       const id = `${y}-${pad(m)}-${pad(d)}`;
-      const r = S.jornadas.get(id);
+      const r = regs.get(id);
       const c = clasificar(id, r, S);
       let cls = "", sub = "";
-      if (r && r.tipo && r.tipo !== "trabajo") { cls = "aus"; sub = TIPOS_AUS[r.tipo][0]; }
+      if (r && r.tipo === "falta") { cls = "falta"; sub = `−${hDec(STD)}`; }
+      else if (r && r.tipo && r.tipo !== "trabajo") { cls = "aus"; sub = TIPOS_AUS[r.tipo][0]; }
       else if (c.abierto) { cls = "abierto"; }
       else if (c.cerrado) {
         cls = c.fest > 0 ? "fest" : c.noct > 0 ? "noct" : c.extra > 0 ? "extra" : "normal";
@@ -571,10 +637,12 @@
     const mes = S.mes;
     let norm = 0, ext = 0, noct = 0, fest = 0, trab = 0, saldoMes = 0, saldoTot = 0, dias = 0, abiertas = 0;
     const aus = { vacaciones: 0, permiso: 0, baja: 0, otra: 0 };
-    for (const [id, r] of S.jornadas) {
+    let faltas = 0;
+    for (const [id, r] of registros()) {
       const c = clasificar(id, r, S);
       if (c.cerrado && !c.ausencia) saldoTot += c.saldo;
       if (!id.startsWith(mes)) continue;
+      if (r.tipo === "falta") { faltas++; saldoMes += c.saldo; continue; }
       if (c.ausencia) { aus[r.tipo] = (aus[r.tipo] || 0) + 1; continue; }
       if (c.abierto) { abiertas++; continue; }
       if (!c.cerrado) continue;
@@ -591,6 +659,7 @@
     const sm = $("s-mes"); sm.textContent = hTxt(saldoMes, true); sm.className = `val num ${saldoMes >= 0 ? "pos" : "neg"}`;
     const st = $("s-total"); st.textContent = hTxt(saldoTot, true); st.className = `val num ${saldoTot >= 0 ? "pos" : "neg"}`;
     const extra = [];
+    if (faltas) extra.push(`sin fichaje ${faltas}`);
     if (aus.vacaciones) extra.push(`vacaciones ${aus.vacaciones}`);
     if (aus.permiso) extra.push(`permisos ${aus.permiso}`);
     if (aus.baja) extra.push(`bajas ${aus.baja}`);
@@ -601,10 +670,11 @@
   function renderDetalle() {
     const lista = $("lista"); lista.textContent = "";
     if (!uid) return;
-    const ids = [...S.jornadas.keys()].filter(id => id.startsWith(S.mes)).sort();
+    const regs = registros();
+    const ids = [...regs.keys()].filter(id => id.startsWith(S.mes)).sort();
     if (!ids.length) { lista.innerHTML = `<div class="empty">Sin registros este mes.</div>`; return; }
     for (const id of ids.reverse()) {
-      const r = S.jornadas.get(id);
+      const r = regs.get(id);
       const c = clasificar(id, r, S);
       const btn = document.createElement("button");
       btn.type = "button"; btn.className = "row";
@@ -612,33 +682,45 @@
       const left = document.createElement("span");
       const d = document.createElement("div"); d.className = "d"; d.textContent = label(id);
       const t = document.createElement("div"); t.className = "t";
-      if (c.ausencia) t.textContent = TIPOS_AUS[r.tipo];
-      else if (c.abierto) t.textContent = `${r.entrada} → abierta${r.pausaIni ? ` · pausa desde ${r.pausaIni}` : ""}`;
-      else t.textContent = `${r.entrada} → ${r.salida}${r.pausaIni && r.pausaFin ? ` · pausa ${r.pausaIni}–${r.pausaFin}` : ""}`;
+      if (r.tipo === "falta") t.textContent = "Sin fichaje";
+      else if (c.ausencia) t.textContent = TIPOS_AUS[r.tipo];
+      else if (c.abierto) t.textContent = `${r.entrada} → abierta`;
+      else t.textContent = `${r.entrada} → ${r.salida}`;
       left.append(d, t);
+      if (!c.ausencia && c.cerrado && c.saldo < 0) {
+        const mt = document.createElement("div"); mt.className = "small";
+        if (r.motivo && r.motivo.tipo) {
+          mt.classList.add("muted");
+          mt.textContent = `Motivo: ${r.motivo.tipo}${r.motivo.texto ? " · " + r.motivo.texto : ""}`;
+        } else {
+          mt.classList.add("neg");
+          mt.textContent = "Falta motivo de horas no cumplidas";
+        }
+        left.append(mt);
+      }
       const right = document.createElement("span"); right.className = "r";
       if (c.ausencia) {
         const w = document.createElement("span"); w.className = "w"; w.textContent = "8 h";
-        const e = document.createElement("span"); e.className = "muted"; e.textContent = "neutral";
-        right.append(w, e);
+        const n = document.createElement("span"); n.className = "muted small"; n.textContent = "neutral";
+        right.append(w, n);
       } else if (c.cerrado) {
         const w = document.createElement("span"); w.className = "w"; w.textContent = hTxt(c.worked);
-        const parts = [];
-        if (c.normal) parts.push(`normal ${hDec(c.normal)}`);
-        if (c.extra) parts.push(`extra ${hDec(c.extra)}`);
-        if (c.noct) parts.push(`noct. ${hDec(c.noct)}`);
-        if (c.fest) parts.push(`fin/fest. ${hDec(c.fest)}`);
-        const e = document.createElement("span");
-        e.className = c.saldo >= 0 ? "pos" : "neg";
-        e.textContent = `saldo ${hTxt(c.saldo, true)}`;
-        const p = document.createElement("span"); p.className = "muted"; p.textContent = parts.join(" · ");
-        right.append(w, e, p);
+        right.append(w);
+        if (c.saldo > 0) {
+          const e = document.createElement("span"); e.className = "pos hx"; e.textContent = `horas extra ${hTxt(c.saldo, true)}`;
+          const parts = [];
+          if (c.extra) parts.push(`extra ${hTxt(c.extra)}`);
+          if (c.noct) parts.push(`nocturna ${hTxt(c.noct)}`);
+          if (c.fest) parts.push(`fin de semana/festivo ${hTxt(c.fest)}`);
+          const p = document.createElement("span"); p.className = "muted small"; p.textContent = parts.join(" · ");
+          right.append(e, p);
+        }
       } else {
         const tg = document.createElement("span"); tg.className = "neg"; tg.textContent = "Sin cerrar";
         right.append(tg);
       }
       btn.append(left, right);
-      btn.addEventListener("click", () => openEditor(id));
+      btn.addEventListener("click", () => (r.tipo === "falta" ? pedirMotivo(id, r) : openEditor(id)));
       lista.append(btn);
     }
   }
@@ -686,7 +768,11 @@
     const op = abierta();
     if (!op) { toast("No hay ninguna jornada abierta."); return; }
     const h = nowHM();
-    if (await guardar(op, { ...S.jornadas.get(op), salida: h })) toast(`Salida registrada a las ${h}`);
+    const rec = { ...S.jornadas.get(op), salida: h };
+    if (await guardar(op, rec)) {
+      toast(`Salida registrada a las ${h}`);
+      if (deficitSinMotivo(op, rec)) pedirMotivo(op, rec);
+    }
   }
 
   // ============ EDITOR ============
@@ -697,12 +783,14 @@
     $("dlg-titulo").textContent = existe ? "Editar" : "Nuevo registro";
     $("f-fecha").value = id;
     $("f-fecha").readOnly = !!existe;
-    $("f-tipo").value = r.tipo || "trabajo";
+    $("f-tipo").value = r.tipo && r.tipo !== "falta" ? r.tipo : "trabajo";
     $("f-entrada").value = r.entrada || "";
     $("f-salida").value = r.salida || "";
     $("f-pini").value = r.pausaIni || "";
     $("f-pfin").value = r.pausaFin || "";
     $("f-borrar").hidden = !existe;
+    const cl = existe ? clasificar(id, existe, S) : null;
+    $("f-motivo").hidden = !(cl && cl.cerrado && !cl.ausencia && cl.saldo < 0);
     $("f-borrar").textContent = "Borrar";
     S.confirmDel = false;
     ajustarTipo();
@@ -733,7 +821,11 @@
       data = { fecha, tipo, entrada: "", salida: "", pausaIni: "", pausaFin: "" };
     }
     err.textContent = "";
-    if (await guardar(fecha, data)) { cerrarEditor(); toast("Guardado"); }
+    if (tipo === "trabajo" && S.jornadas.get(fecha)?.motivo) data.motivo = S.jornadas.get(fecha).motivo;
+    if (await guardar(fecha, data)) {
+      cerrarEditor(); toast("Guardado");
+      if (deficitSinMotivo(fecha, data)) pedirMotivo(fecha, data);
+    }
   });
 
   $("f-borrar").addEventListener("click", async () => {
@@ -763,12 +855,13 @@
 
   // ============ CSV ============
   $("btn-csv").addEventListener("click", () => {
-    const ids = [...S.jornadas.keys()].filter(id => id.startsWith(S.mes)).sort();
+    const regs = registros();
+    const ids = [...regs.keys()].filter(id => id.startsWith(S.mes)).sort();
     const cab = ["Fecha", "Día", "Tipo", "Entrada", "Pausa inicio", "Pausa fin", "Salida",
                  "Normal (h)", "Extra normal (h)", "Nocturna (h)", "Fin de semana y festivo (h)", "Trabajadas (h)", "Saldo (h)"];
     const filas = [cab.join(";")];
     for (const id of ids) {
-      const r = S.jornadas.get(id);
+      const r = regs.get(id);
       const c = clasificar(id, r, S);
       const tipo = r.tipo && r.tipo !== "trabajo" ? TIPOS_AUS[r.tipo] : (c.abierto ? "Abierta" : "Trabajo");
       filas.push([id, parseISO(id).toLocaleDateString("es-ES", { weekday: "long" }), tipo,
@@ -836,7 +929,7 @@
       body: JSON.stringify({ name: "Copias de seguridad - Control de jornada", mimeType: "application/vnd.google-apps.folder" })
     });
     const f = await r.json();
-    await setDoc(ref, { carpetaId: f.id });
+    await setDoc(ref, { carpetaId: f.id }, { merge: true });
     return f.id;
   }
 
@@ -931,6 +1024,204 @@
     } catch (e) {
       toast(`No se pudo restaurar: ${e.message}`);
     }
+  });
+
+  // ============ INFORME MENSUAL EN PDF ============
+  const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  const signo = m => (m > 0 ? "+" : m < 0 ? "-" : "") + Math.abs(m / 60).toFixed(2).replace(".", ",");
+  const hh = m => (m / 60).toFixed(2).replace(".", ",");
+
+  function datosMes(mes) {
+    const filas = [];
+    const tot = { trab: 0, norm: 0, ext: 0, noct: 0, fest: 0, saldoMes: 0, saldoTot: 0, dias: 0, abiertas: 0,
+                  aus: { vacaciones: 0, permiso: 0, baja: 0, otra: 0 } };
+    for (const [id, r] of registros()) {
+      const c = clasificar(id, r, S);
+      if (c.cerrado && !c.ausencia) tot.saldoTot += c.saldo;
+      if (!id.startsWith(mes)) continue;
+      filas.push({ id, r, c });
+      if (r.tipo === "falta") { tot.saldoMes += c.saldo; continue; }
+      if (c.ausencia) { tot.aus[r.tipo] = (tot.aus[r.tipo] || 0) + 1; continue; }
+      if (c.abierto) { tot.abiertas++; continue; }
+      if (!c.cerrado) continue;
+      tot.dias++; tot.norm += c.normal; tot.ext += c.extra; tot.noct += c.noct;
+      tot.fest += c.fest; tot.trab += c.worked; tot.saldoMes += c.saldo;
+    }
+    filas.sort((a, b) => (a.id < b.id ? -1 : 1));
+    return { filas, tot };
+  }
+
+  function construirPDF(mes, nombre) {
+    const { jsPDF } = window.jspdf;
+    const { filas, tot } = datosMes(mes);
+    const [y, m] = mes.split("-").map(Number);
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const L = 14;
+
+    doc.setFont("helvetica", "bold"); doc.setFontSize(16);
+    doc.text("Informe mensual de jornada", L, 18);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(11);
+    doc.text(`${MESES[m - 1]} de ${y}${nombre ? " · " + nombre : ""}`, L, 25);
+
+    const res = [
+      ["Horas trabajadas", `${hh(tot.trab)} h`],
+      ["Normal", `${hh(tot.norm)} h`],
+      ["Extra normal", `${hh(tot.ext)} h`],
+      ["Nocturna (22:00 a 06:00)", `${hh(tot.noct)} h`],
+      ["Fin de semana y festivo", `${hh(tot.fest)} h`],
+      ["Saldo del mes", `${signo(tot.saldoMes)} h`],
+      ["Saldo acumulado", `${signo(tot.saldoTot)} h`],
+      ["Días cerrados", String(tot.dias)],
+      ["Ausencias", `vacaciones ${tot.aus.vacaciones}, permisos ${tot.aus.permiso}, bajas ${tot.aus.baja}, otras ${tot.aus.otra}`]
+    ];
+    let yy = 36;
+    doc.setFontSize(10);
+    for (const [k, v] of res) {
+      doc.setFont("helvetica", "normal"); doc.text(k, L, yy);
+      doc.setFont("helvetica", "bold"); doc.text(v, L + 70, yy);
+      yy += 6;
+    }
+    yy += 6;
+
+    const cols = [["Fecha", 24], ["Tipo", 24], ["Entrada", 15], ["Pausa", 20], ["Salida", 15],
+                  ["Normal", 16], ["Extra", 16], ["Noct.", 16], ["Fin/fest.", 18], ["Saldo", 16]];
+    const cabecera = () => {
+      doc.setFillColor(235, 233, 227); doc.rect(L, yy, 180, 7, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8);
+      let x = L + 1.5;
+      for (const [t, w] of cols) { doc.text(t, x, yy + 4.8); x += w; }
+      yy += 8;
+      doc.setFont("helvetica", "normal");
+    };
+
+    cabecera();
+    for (const { id, r, c } of filas) {
+      if (yy > 272) { doc.addPage(); yy = 18; cabecera(); }
+      const cerr = c.cerrado && !c.ausencia;
+      const fecha = parseISO(id).toLocaleDateString("es-ES", { weekday: "short", day: "2-digit", month: "2-digit" });
+      const tipo = r.tipo === "falta" || c.ausencia ? TIPOS_AUS[r.tipo] : c.abierto ? "Abierta" : "Trabajo";
+      const pausa = r.pausaIni && r.pausaFin ? `${r.pausaIni}-${r.pausaFin}` : "";
+      const vals = [
+        fecha, tipo, r.entrada || "", pausa, r.salida || "",
+        cerr ? hh(c.normal) : "", cerr ? hh(c.extra) : "", cerr ? hh(c.noct) : "", cerr ? hh(c.fest) : "",
+        c.ausencia ? "0,00" : cerr ? signo(c.saldo) : ""
+      ];
+      let x = L + 1.5;
+      cols.forEach(([, w], i) => { doc.text(String(vals[i]), x, yy + 4); x += w; });
+      doc.setDrawColor(222, 219, 211); doc.line(L, yy + 5.5, L + 180, yy + 5.5);
+      yy += 6.5;
+    }
+
+    const n = doc.getNumberOfPages();
+    for (let i = 1; i <= n; i++) {
+      doc.setPage(i); doc.setFontSize(8); doc.setTextColor(120, 120, 120);
+      doc.text(`Generado el ${new Date().toLocaleString("es-ES")} · Página ${i} de ${n}`, L, 290);
+      doc.setTextColor(0, 0, 0);
+    }
+    return doc.output("blob");
+  }
+
+  async function carpetaInformes() {
+    const ref = doc(db, "users", uid, "ajustes", "drive");
+    const snap = await getDoc(ref);
+    const d = snap.exists() ? snap.data() : {};
+    if (d.informesCarpetaId) return d.informesCarpetaId;
+    const r = await api(`${DRIVE}/files`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Informes mensuales - Control de jornada", mimeType: "application/vnd.google-apps.folder" })
+    });
+    const f = await r.json();
+    await setDoc(ref, { informesCarpetaId: f.id }, { merge: true });
+    return f.id;
+  }
+
+  async function guardarInforme() {
+    const mes = $("mes-informe").value;
+    if (!mes) { toast("Elige un mes."); return; }
+    const btn = $("btn-informe");
+    btn.disabled = true;
+    try {
+      if (!window.jspdf) throw new Error("no se cargó el generador de PDF, revisa la conexión");
+      await tokenDrive(); // permiso mientras el clic sigue activo
+      const carpeta = await carpetaInformes();
+      const nombre = `informe-jornada-${mes}.pdf`;
+      const pdf = construirPDF(mes, auth.currentUser?.displayName || "");
+
+      // Si ya existe un informe de ese mes en la carpeta, se reemplaza.
+      const q = encodeURIComponent(`'${carpeta}' in parents and name='${nombre}' and trashed=false`);
+      const existentes = (await (await api(`${DRIVE}/files?q=${q}&fields=files(id)`)).json()).files || [];
+      const meta = existentes.length
+        ? { name: nombre, mimeType: "application/pdf" }
+        : { name: nombre, parents: [carpeta], mimeType: "application/pdf" };
+      const sep = "pdf" + Date.now();
+      const body = new Blob([
+        `--${sep}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${sep}\r\nContent-Type: application/pdf\r\n\r\n`,
+        pdf,
+        `\r\n--${sep}--`
+      ]);
+      const url = existentes.length
+        ? `${UPLOAD}/files/${existentes[0].id}?uploadType=multipart&fields=id`
+        : `${UPLOAD}/files?uploadType=multipart&fields=id`;
+      await api(url, {
+        method: existentes.length ? "PATCH" : "POST",
+        headers: { "Content-Type": `multipart/related; boundary=${sep}` },
+        body
+      });
+      toast(`Informe de ${mes} guardado en Drive`);
+    } catch (e) {
+      toast(`No se pudo guardar el informe: ${e.message}`);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  $("btn-informe").addEventListener("click", guardarInforme);
+  {
+    // Por defecto, el mes anterior, que es el que normalmente se cierra.
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1);
+    $("mes-informe").value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  }
+
+  // ============ MOTIVO DE HORAS NO CUMPLIDAS ============
+  let motivoId = null;
+
+  // Una jornada cerrada por debajo de la estándar, sin motivo, necesita aclaración.
+  function deficitSinMotivo(id, rec) {
+    const c = clasificar(id, rec, S);
+    return c.cerrado && !c.ausencia && c.saldo < 0 && !(rec.motivo && rec.motivo.tipo);
+  }
+
+  function pedirMotivo(id, rec) {
+    const c = clasificar(id, rec, S);
+    motivoId = id;
+    $("motivo-resumen").textContent = `${label(id)}: trabajadas ${hTxt(c.worked)} de ${hTxt(STD)}. Faltan ${hTxt(-c.saldo)}.`;
+    $("m-tipo").value = (rec.motivo && rec.motivo.tipo) || "";
+    $("m-texto").value = (rec.motivo && rec.motivo.texto) || "";
+    $("m-err").textContent = "";
+    $("dlg-motivo").showModal();
+  }
+
+  $("form-motivo").addEventListener("submit", async e => {
+    e.preventDefault();
+    const tipo = $("m-tipo").value;
+    const texto = $("m-texto").value.trim();
+    if (!tipo) { $("m-err").textContent = "Elige un motivo."; return; }
+    if (tipo === "Otro" && !texto) { $("m-err").textContent = "Explica el motivo en el detalle."; return; }
+    const base = S.jornadas.get(motivoId) || { fecha: motivoId, tipo: "falta" };
+    const rec = { ...base, motivo: { tipo, texto } };
+    if (await guardar(motivoId, rec)) {
+      $("dlg-motivo").close();
+      toast("Motivo guardado");
+    }
+  });
+  $("m-cerrar").addEventListener("click", () => $("dlg-motivo").close());
+
+  $("f-motivo").addEventListener("click", () => {
+    const id = S.editId;
+    const rec = S.jornadas.get(id);
+    cerrarEditor();
+    if (rec) pedirMotivo(id, rec);
   });
 
   // ============ SESIÓN ============

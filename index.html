@@ -259,6 +259,29 @@
       <div class="foot small muted" id="s-pie"></div>
     </section>
 
+    <section class="card" aria-labelledby="t-copia">
+      <div class="sec-head">
+        <h2 id="t-copia">Copia de seguridad en Drive</h2>
+        <span class="small muted" id="copia-ultima"></span>
+      </div>
+      <p class="small muted" style="margin:10px 0 0">Guarda todas tus jornadas y turnos en una carpeta de tu Google Drive. La primera vez te pedirá permiso para acceder a Drive.</p>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn primary" id="btn-copia" type="button">Guardar copia</button>
+        <button class="btn" id="btn-restaurar-ver" type="button">Restaurar…</button>
+      </div>
+      <div id="restaurar" class="form" hidden>
+        <div class="field">
+          <label for="sel-copia">Copia a restaurar (de la más reciente a la más antigua)</label>
+          <select class="sel" id="sel-copia"></select>
+        </div>
+        <span class="hint">Restaurar escribe los registros de la copia sobre los actuales. No borra los que no estén en la copia.</span>
+        <div class="dlg-actions">
+          <button class="btn danger" id="btn-restaurar" type="button">Restaurar copia</button>
+          <button class="btn ghost" id="btn-restaurar-no" type="button">Cancelar</button>
+        </div>
+      </div>
+    </section>
+
     <section class="card" aria-labelledby="t-detalle">
       <h2 id="t-detalle">Detalle del mes</h2>
       <div class="list" id="lista"></div>
@@ -320,7 +343,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-  import { initializeFirestore, persistentLocalCache, doc, collection, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { initializeFirestore, persistentLocalCache, doc, collection, setDoc, getDoc, deleteDoc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   // ============ CONFIGURACIÓN DE FIREBASE ============
   // Pega aquí el objeto firebaseConfig de tu proyecto (Configuración del proyecto → Tus apps → Web).
@@ -775,6 +798,140 @@
   $("btn-principal").addEventListener("click", accionPrincipal);
   $("btn-salir").addEventListener("click", accionSalir);
   $("btn-corregir").addEventListener("click", () => openEditor(todayISO()));
+
+  // ============ COPIA DE SEGURIDAD EN GOOGLE DRIVE ============
+  const driveProvider = new GoogleAuthProvider();
+  driveProvider.addScope("https://www.googleapis.com/auth/drive.file");
+  const DRIVE = "https://www.googleapis.com/drive/v3";
+  const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
+  let driveToken = null, driveExp = 0;
+
+  // Pide acceso a Drive (ventana de Google). Debe llamarse desde un clic del usuario.
+  async function tokenDrive() {
+    if (driveToken && Date.now() < driveExp) return driveToken;
+    const res = await signInWithPopup(auth, driveProvider);
+    if (res.user.uid !== uid) throw new Error("Usa la misma cuenta de Google.");
+    const cred = GoogleAuthProvider.credentialFromResult(res);
+    if (!cred || !cred.accessToken) throw new Error("Google no concedió acceso a Drive.");
+    driveToken = cred.accessToken;
+    driveExp = Date.now() + 50 * 60 * 1000;
+    return driveToken;
+  }
+
+  async function api(url, opts = {}) {
+    const t = await tokenDrive();
+    const r = await fetch(url, { ...opts, headers: { Authorization: `Bearer ${t}`, ...(opts.headers || {}) } });
+    if (!r.ok) throw new Error(`Drive ${r.status}: ${(await r.text()).slice(0, 160)}`);
+    return r;
+  }
+
+  // Carpeta de copias: se crea la primera vez y su id se guarda en Firestore.
+  async function carpetaCopias() {
+    const ref = doc(db, "users", uid, "ajustes", "drive");
+    const snap = await getDoc(ref);
+    if (snap.exists() && snap.data().carpetaId) return snap.data().carpetaId;
+    const r = await api(`${DRIVE}/files`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Copias de seguridad - Control de jornada", mimeType: "application/vnd.google-apps.folder" })
+    });
+    const f = await r.json();
+    await setDoc(ref, { carpetaId: f.id });
+    return f.id;
+  }
+
+  async function guardarCopia() {
+    const btn = $("btn-copia");
+    btn.disabled = true;
+    try {
+      await tokenDrive(); // primero el permiso, mientras el clic sigue activo
+      const carpeta = await carpetaCopias();
+      const backup = { version: 1, creada: new Date().toISOString(), jornadas: {}, semanas: {} };
+      for (const [id, d] of S.jornadas) backup.jornadas[id] = d;
+      for (const [id, d] of S.semanas) backup.semanas[id] = d;
+      const nombre = `control-jornada-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.json`;
+      const sep = "cj" + Date.now();
+      const meta = JSON.stringify({ name: nombre, parents: [carpeta], mimeType: "application/json" });
+      const body = `--${sep}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n` +
+                   `--${sep}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(backup)}\r\n--${sep}--`;
+      await api(`${UPLOAD}/files?uploadType=multipart&fields=id`, {
+        method: "POST",
+        headers: { "Content-Type": `multipart/related; boundary=${sep}` },
+        body
+      });
+      $("copia-ultima").textContent = `Última: ${new Date().toLocaleString("es-ES")}`;
+      toast("Copia guardada en Drive");
+    } catch (e) {
+      toast(`No se pudo guardar la copia: ${e.message}`);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function listarCopias() {
+    const carpeta = await carpetaCopias();
+    const q = encodeURIComponent(`'${carpeta}' in parents and trashed=false`);
+    const r = await api(`${DRIVE}/files?q=${q}&fields=files(id,name,createdTime)&orderBy=createdTime desc&pageSize=50`);
+    return (await r.json()).files || [];
+  }
+
+  $("btn-copia").addEventListener("click", guardarCopia);
+
+  $("btn-restaurar-ver").addEventListener("click", async () => {
+    await tokenDrive().catch(() => {});
+    const box = $("restaurar"), sel = $("sel-copia");
+    box.hidden = false;
+    sel.textContent = "";
+    try {
+      const files = await listarCopias();
+      if (!files.length) {
+        const o = document.createElement("option"); o.textContent = "No hay copias en Drive"; o.value = "";
+        sel.append(o);
+        return;
+      }
+      for (const f of files) {
+        const o = document.createElement("option");
+        o.value = f.id; o.textContent = f.name;
+        sel.append(o);
+      }
+    } catch (e) {
+      box.hidden = true;
+      toast(`No se pudieron listar las copias: ${e.message}`);
+    }
+  });
+
+  $("btn-restaurar-no").addEventListener("click", () => { $("restaurar").hidden = true; });
+
+  let confirmRestore = false;
+  $("btn-restaurar").addEventListener("click", async () => {
+    const id = $("sel-copia").value;
+    if (!id) return;
+    const btn = $("btn-restaurar");
+    if (!confirmRestore) {
+      confirmRestore = true; btn.textContent = "Pulsa otra vez para restaurar";
+      setTimeout(() => { confirmRestore = false; btn.textContent = "Restaurar copia"; }, 4000);
+      return;
+    }
+    confirmRestore = false; btn.textContent = "Restaurar copia";
+    try {
+      const r = await api(`${DRIVE}/files/${id}?alt=media`);
+      const b = await r.json();
+      if (!b || b.version !== 1 || typeof b.jornadas !== "object") throw new Error("el archivo no es una copia válida");
+      const ops = [
+        ...Object.entries(b.jornadas).map(([k, d]) => ["jornadas", k, d]),
+        ...Object.entries(b.semanas || {}).map(([k, d]) => ["semanas", k, d])
+      ];
+      for (let i = 0; i < ops.length; i += 400) {
+        const batch = writeBatch(db);
+        for (const [col, k, d] of ops.slice(i, i + 400)) batch.set(doc(db, "users", uid, col, k), d);
+        await batch.commit();
+      }
+      $("restaurar").hidden = true;
+      toast(`Restaurados ${ops.length} registros`);
+    } catch (e) {
+      toast(`No se pudo restaurar: ${e.message}`);
+    }
+  });
 
   // ============ SESIÓN ============
   function mostrar(vista) {

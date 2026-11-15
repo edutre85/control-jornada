@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f4f3ef">
+<title>Control de jornada</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+  :root {
+    --bg: #f4f3ef; --surface: #ffffff; --fg: #1d1c1a; --muted: #6b675f; --line: #dedbd3;
+    --accent: #b8502a; --accent-fg: #ffffff;
+    --c-normal: #2d7a55; --c-extra: #d19a1c; --c-noct: #6b4fb5; --c-fest: #c0392b; --c-aus: #2f6fb0;
+    --neg: #b03a2a; --pos: #2d7a55;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15140f; --surface: #1f1e19; --fg: #f1eee7; --muted: #9c978a; --line: #33312a;
+      --accent: #e0743f; --accent-fg: #15140f;
+      --c-normal: #3f9d70; --c-extra: #e0b043; --c-noct: #8d75d6; --c-fest: #e0655a; --c-aus: #5d97d6;
+      --neg: #e27a68; --pos: #5fbf8c;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15140f; --surface: #1f1e19; --fg: #f1eee7; --muted: #9c978a; --line: #33312a;
+    --accent: #e0743f; --accent-fg: #15140f;
+    --c-normal: #3f9d70; --c-extra: #e0b043; --c-noct: #8d75d6; --c-fest: #e0655a; --c-aus: #5d97d6;
+    --neg: #e27a68; --pos: #5fbf8c;
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    font: 15px/1.45 Inter, system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--fg);
+    padding-block: 18px 40px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  [hidden] { display: none !important; }
+  .app { max-width: 540px; margin: 0 auto; display: grid; gap: 16px; }
+  h1, h2 { font-family: "Space Grotesk", Inter, system-ui, sans-serif; text-wrap: balance; margin: 0; }
+  h1 { font-size: 22px; font-weight: 600; }
+  h2 { font-size: 16px; font-weight: 600; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .label { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .num { font-variant-numeric: tabular-nums; }
+  .pos { color: var(--pos); }
+  .neg { color: var(--neg); }
+
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .head .who { display: grid; gap: 4px; justify-items: end; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; min-width: 0; }
+  .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
+  .btn {
+    font: inherit; font-weight: 600; min-height: 52px; padding: 0 14px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+  .btn.ghost { background: transparent; min-height: 40px; font-weight: 500; padding: 0 10px; }
+  .btn.danger { color: var(--neg); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn:focus-visible, input:focus-visible, select:focus-visible, .day:focus-visible, .row:focus-visible {
+    outline: 3px solid var(--accent); outline-offset: 2px;
+  }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .now { font-family: "Space Grotesk", Inter, sans-serif; font-size: 48px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
+  .status { min-height: 2.9em; margin-top: 10px; }
+
+  .sel, .month {
+    min-height: 40px; font: inherit; font-size: 16px; padding: 6px 10px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+  }
+
+  /* Calendario */
+  .nav { display: flex; align-items: center; gap: 6px; }
+  .nav .title { min-width: 9em; text-align: center; font-family: "Space Grotesk", Inter, sans-serif; font-weight: 600; text-transform: capitalize; }
+  .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; margin-top: 14px; }
+  .wd { font-size: 11px; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: .04em; }
+  .day {
+    aspect-ratio: 1; min-width: 0; padding: 0; font: inherit; color: var(--fg);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+    display: grid; align-content: center; justify-items: center; gap: 1px; cursor: pointer;
+  }
+  .day .n { font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; line-height: 1; }
+  .day .s { font-size: 10px; line-height: 1; opacity: .85; }
+  .day.void { visibility: hidden; }
+  .day.today { box-shadow: inset 0 0 0 2px var(--fg); }
+  .day.normal { background: var(--c-normal); color: #fff; border-color: transparent; }
+  .day.extra { background: var(--c-extra); color: #1d1c1a; border-color: transparent; }
+  .day.noct { background: var(--c-noct); color: #fff; border-color: transparent; }
+  .day.fest { background: var(--c-fest); color: #fff; border-color: transparent; }
+  .day.aus { background: var(--c-aus); color: #fff; border-color: transparent; }
+  .day.abierto { border: 2px dashed var(--muted); }
+  .day.festivo { color: var(--c-fest); border-color: var(--c-fest); }
+  .day.libre { color: var(--muted); }
+  .day.festivo .n, .day.libre .n { font-weight: 500; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 14px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+
+  /* Resumen */
+  .summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+  .cell { display: grid; gap: 4px; min-width: 0; }
+  .cell .val { font-family: "Space Grotesk", Inter, sans-serif; font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .cell .val.sm { font-size: 15px; }
+  .foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+
+  /* Detalle */
+  .list { display: grid; gap: 8px; margin-top: 12px; }
+  .row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center;
+    width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; min-width: 0;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  }
+  .row .d { font-weight: 600; text-transform: capitalize; }
+  .row .t { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .row .r { text-align: right; font-variant-numeric: tabular-nums; display: grid; gap: 2px; font-size: 13px; }
+  .row .r .w { font-weight: 600; font-size: 15px; }
+  .empty { padding: 16px 4px; color: var(--muted); text-align: center; }
+
+  .notice { display: none; background: var(--surface); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+  .notice.show { display: block; }
+  .login { display: grid; gap: 14px; justify-items: start; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+    background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: 14px;
+    max-width: calc(100% - 32px); opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .toast.show { opacity: 1; }
+
+  dialog {
+    border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--fg);
+    width: min(92vw, 420px); padding: 20px; box-sizing: border-box;
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, .45); }
+  .form { display: grid; gap: 14px; margin-top: 14px; }
+  .field { display: grid; gap: 6px; min-width: 0; }
+  .field label { font-size: 13px; color: var(--muted); }
+  .field input, .field select {
+    width: 100%; box-sizing: border-box; min-height: 48px; padding: 10px 12px;
+    font: inherit; font-size: 16px; color: var(--fg);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .field input[readonly] { opacity: .7; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .err { color: var(--neg); font-size: 14px; min-height: 1.2em; }
+  .dlg-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+  .dlg-actions .wide { grid-column: 1 / -1; }
+
+  @media (max-width: 380px) {
+    .now { font-size: 40px; }
+    .summary { grid-template-columns: 1fr 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="head">
+    <div>
+      <h1>Control de jornada</h1>
+      <div class="muted small" id="hoy"></div>
+    </div>
+    <div class="who" id="quien" hidden>
+      <span class="small muted" id="email"></span>
+      <button class="btn ghost" id="btn-salir-sesion" type="button">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <div class="notice" id="aviso" role="status"></div>
+
+  <!-- Inicio de sesión -->
+  <section class="card login" id="login" hidden>
+    <h2>Acceso</h2>
+    <p class="muted small" style="margin:0">Entra con tu cuenta de Google para ver y guardar tus jornadas.</p>
+    <button class="btn primary" id="btn-login" type="button">Entrar con Google</button>
+  </section>
+
+  <!-- Aplicación -->
+  <main id="main" class="app" style="gap:16px" hidden>
+
+    <section class="card" aria-labelledby="t-marcaje">
+      <div class="sec-head">
+        <h2 id="t-marcaje">Marcaje</h2>
+        <span class="label" id="turno-hoy"></span>
+      </div>
+      <div class="now" id="ahora" style="margin-top:12px">--:--</div>
+      <div class="status" id="estado" aria-live="polite"></div>
+      <div class="actions">
+        <button class="btn primary" id="btn-principal" type="button" disabled>Entrar</button>
+        <button class="btn" id="btn-salir" type="button" disabled>Salir</button>
+      </div>
+      <button class="btn ghost" id="btn-corregir" type="button" style="margin-top:10px">Corregir hoy</button>
+    </section>
+
+    <section class="card" aria-labelledby="t-semana">
+      <div class="sec-head">
+        <h2 id="t-semana">Turno de la semana</h2>
+        <span class="small muted" id="semana-rango"></span>
+      </div>
+      <div class="sec-head" style="margin-top:12px">
+        <span id="semana-turno" class="num"></span>
+        <select class="sel" id="sel-turno" aria-label="Turno de esta semana">
+          <option value="auto">Automático (rotación)</option>
+          <option value="manana">Mañana 06:00–14:00</option>
+          <option value="tarde">Tarde 14:00–22:00</option>
+          <option value="partida">Partida 08:00–16:30</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="t-cal">
+      <div class="sec-head">
+        <h2 id="t-cal">Calendario</h2>
+        <div class="nav">
+          <button class="btn ghost" id="mes-ant" type="button" aria-label="Mes anterior">‹</button>
+          <span class="title" id="mes-titulo"></span>
+          <button class="btn ghost" id="mes-sig" type="button" aria-label="Mes siguiente">›</button>
+        </div>
+      </div>
+      <div class="cal" id="cal-cab"></div>
+      <div class="cal" id="cal"></div>
+      <div class="legend">
+        <span><i style="background:var(--c-normal)"></i>Normal</span>
+        <span><i style="background:var(--c-extra)"></i>Extra normal</span>
+        <span><i style="background:var(--c-noct)"></i>Nocturna</span>
+        <span><i style="background:var(--c-fest)"></i>Fin de semana o festivo trabajado</span>
+        <span><i style="background:var(--c-aus)"></i>Ausencia</span>
+        <span><i style="border:2px dashed var(--muted)"></i>Sin cerrar</span>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="t-resumen">
+      <div class="sec-head">
+        <h2 id="t-resumen">Cómputo del mes</h2>
+        <button class="btn ghost" id="btn-csv" type="button">Exportar CSV</button>
+      </div>
+      <div class="summary">
+        <div class="cell"><span class="label">Trabajadas</span><span class="val num" id="s-trab">0 h</span></div>
+        <div class="cell"><span class="label">Normal</span><span class="val num" id="s-norm">0 h</span></div>
+        <div class="cell"><span class="label">Extra normal</span><span class="val num" id="s-ext">0 h</span></div>
+        <div class="cell"><span class="label">Nocturna</span><span class="val num" id="s-noc">0 h</span></div>
+        <div class="cell"><span class="label">Fin de semana y festivo</span><span class="val num" id="s-fest">0 h</span></div>
+        <div class="cell"><span class="label">Ausencias</span><span class="val num sm" id="s-aus">0</span></div>
+        <div class="cell"><span class="label">Saldo del mes</span><span class="val num" id="s-mes">0 h</span></div>
+        <div class="cell"><span class="label">Saldo total</span><span class="val num" id="s-total">0 h</span></div>
+      </div>
+      <div class="foot small muted" id="s-pie"></div>
+    </section>
+
+    <section class="card" aria-labelledby="t-detalle">
+      <h2 id="t-detalle">Detalle del mes</h2>
+      <div class="list" id="lista"></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlg-titulo">
+  <h2 id="dlg-titulo">Jornada</h2>
+  <form class="form" id="form" novalidate>
+    <div class="field">
+      <label for="f-fecha">Fecha</label>
+      <input id="f-fecha" type="date" required>
+    </div>
+    <div class="field">
+      <label for="f-tipo">Tipo de día</label>
+      <select id="f-tipo">
+        <option value="trabajo">Jornada de trabajo</option>
+        <option value="vacaciones">Vacaciones</option>
+        <option value="permiso">Permiso</option>
+        <option value="baja">Baja por enfermedad</option>
+        <option value="otra">Otra ausencia</option>
+      </select>
+    </div>
+    <div id="bloque-horas" class="form" style="margin:0">
+      <div class="two">
+        <div class="field">
+          <label for="f-entrada">Entrada</label>
+          <input id="f-entrada" type="time">
+        </div>
+        <div class="field">
+          <label for="f-salida">Salida</label>
+          <input id="f-salida" type="time">
+        </div>
+      </div>
+      <div class="two">
+        <div class="field">
+          <label for="f-pini">Inicio de pausa</label>
+          <input id="f-pini" type="time">
+        </div>
+        <div class="field">
+          <label for="f-pfin">Fin de pausa</label>
+          <input id="f-pfin" type="time">
+        </div>
+      </div>
+      <span class="hint">Las pausas se descuentan de las horas trabajadas. Deja la salida vacía si la jornada sigue abierta.</span>
+    </div>
+    <div class="err" id="f-err" role="alert"></div>
+    <div class="dlg-actions">
+      <button class="btn primary" type="submit">Guardar</button>
+      <button class="btn" id="f-cancelar" type="button">Cancelar</button>
+      <button class="btn danger wide" id="f-borrar" type="button" hidden>Borrar</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { initializeFirestore, persistentLocalCache, doc, collection, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // ============ CONFIGURACIÓN DE FIREBASE ============
+  // Pega aquí el objeto firebaseConfig de tu proyecto (Configuración del proyecto → Tus apps → Web).
+  const firebaseConfig = {
+    apiKey: "AIzaSyCY5PR3qDg4lgCYQ1m2TQ053Ub7IAIykos",
+    authDomain: "control-jornada-84779.firebaseapp.com",
+    projectId: "control-jornada-84779",
+    storageBucket: "control-jornada-84779.firebasestorage.app",
+    messagingSenderId: "468839457575",
+    appId: "1:468839457575:web:4481af23b2578943963f02"
+  };
+
+  // ============ REGLAS DE LA JORNADA ============
+  const STD = 480;                                  // jornada estándar: 8 h en minutos
+  const NOCT_DESDE = 22 * 60, NOCT_HASTA = 6 * 60;  // franja nocturna 22:00–06:00
+  const VENTANA = { manana: [360, 840], tarde: [840, 1320], partida: [480, 990] };
+  // Ciclo de rotación: la semana del 16 de noviembre de 2026 es de tarde; las semanas alternan.
+  const ANCLA = { lunes: "2026-11-16", turno: "tarde" };
+  // Festivos 2026 (rojo, azul y verde del calendario laboral).
+  const FESTIVOS = new Set([
+    "2026-01-01","2026-01-05","2026-01-06","2026-04-02","2026-04-03","2026-04-23",
+    "2026-05-01","2026-07-13","2026-07-14","2026-08-15","2026-10-12","2026-11-01",
+    "2026-11-02","2026-12-06","2026-12-07","2026-12-08","2026-12-21","2026-12-22",
+    "2026-12-23","2026-12-24","2026-12-25","2026-12-28","2026-12-29","2026-12-30","2026-12-31"
+  ]);
+  const TIPOS_AUS = { vacaciones: "Vacaciones", permiso: "Permiso", baja: "Baja", otra: "Ausencia" };
+
+  // ============ UTILIDADES ============
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2, "0");
+  const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parseISO = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const addDays = (s, n) => { const d = parseISO(s); d.setDate(d.getDate() + n); return iso(d); };
+  const mondayOf = s => { const d = parseISO(s); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return iso(d); };
+  const toMin = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+  const nowHM = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const hTxt = (min, signed = false) => {
+    const a = Math.abs(Math.round(min));
+    const s = !signed || min === 0 ? "" : min > 0 ? "+" : "−";
+    return `${s}${Math.floor(a / 60)} h ${pad(a % 60)} min`;
+  };
+  const hDec = min => (min / 60).toFixed(2).replace(".", ",");
+  const label = s => parseISO(s).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
+  const esFin = s => { const w = parseISO(s).getDay(); return w === 0 || w === 6; };
+  const esFestivo = s => FESTIVOS.has(s) || esFin(s);
+  const laborable = s => !esFestivo(s);
+  const turnoBase = lunes => {
+    const semanas = Math.round((parseISO(lunes) - parseISO(ANCLA.lunes)) / 604800000);
+    const par = ((semanas % 2) + 2) % 2 === 0;
+    return par ? ANCLA.turno : (ANCLA.turno === "tarde" ? "manana" : "tarde");
+  };
+
+  // ============ CLASIFICACIÓN ============
+  function quitar(segs, a, b) {
+    const out = [];
+    for (const [x, y] of segs) {
+      if (b <= x || a >= y) { out.push([x, y]); continue; }
+      if (a > x) out.push([x, a]);
+      if (b < y) out.push([b, y]);
+    }
+    return out;
+  }
+
+  // Devuelve minutos por categoría y saldo de un día. Usa el turno planificado de su semana.
+  function clasificar(id, r, S) {
+    const c = { normal: 0, extra: 0, noct: 0, fest: 0, worked: 0, expected: 0, saldo: 0,
+                abierto: false, cerrado: false, ausencia: false };
+    if (!r) return c;
+    if (r.tipo && r.tipo !== "trabajo") { c.ausencia = true; c.cerrado = true; return c; }
+    if (!r.entrada) return c;
+    if (!r.salida) { c.abierto = true; return c; }
+
+    c.cerrado = true;
+    const e = toMin(r.entrada);
+    let s = toMin(r.salida); if (s < e) s += 1440;
+    let segs = [[e, s]];
+    if (r.pausaIni && r.pausaFin) {
+      let pi = toMin(r.pausaIni); if (pi < e) pi += 1440;
+      let pf = toMin(r.pausaFin); if (pf < pi) pf += 1440;
+      segs = quitar(segs, pi, pf);
+    }
+    const turno = S.semanas.get(mondayOf(id))?.turno || turnoBase(mondayOf(id));
+    const [w0, w1] = VENTANA[turno] || VENTANA.tarde;
+    const lab = laborable(id);
+    for (const [x, y] of segs) {
+      for (let m = x; m < y; m++) {
+        const k = m % 1440;
+        if (!lab) c.fest++;
+        else if (k >= NOCT_DESDE || k < NOCT_HASTA) c.noct++;
+        else if (k >= w0 && k < w1) c.normal++;
+        else c.extra++;
+      }
+    }
+    c.worked = c.normal + c.extra + c.noct + c.fest;
+    c.expected = lab ? STD : 0;
+    c.saldo = c.worked - c.expected;
+    return c;
+  }
+
+  // ============ ESTADO ============
+  const S = {
+    jornadas: new Map(),
+    semanas: new Map(),
+    mes: "",
+    hoyTurnoSel: null,
+    editId: null,
+    busy: false,
+    confirmDel: false
+  };
+  let uid = null, unsubJ = null, unsubS = null, db = null, auth = null;
+
+  function toast(msg) {
+    const t = $("toast");
+    t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast.h);
+    toast.h = setTimeout(() => t.classList.remove("show"), 3200);
+  }
+  function notice(msg) { const n = $("aviso"); n.textContent = msg || ""; n.classList.toggle("show", !!msg); }
+
+  function abierta() {
+    let best = null;
+    for (const [id, r] of S.jornadas) {
+      if ((!r.tipo || r.tipo === "trabajo") && r.entrada && !r.salida && (!best || id > best)) best = id;
+    }
+    return best;
+  }
+
+  // ============ RENDER ============
+  function renderMarcaje() {
+    const hoy = todayISO();
+    const op = abierta();
+    const r = op ? S.jornadas.get(op) : null;
+    const enPausa = r && r.pausaIni && !r.pausaFin;
+    $("ahora").textContent = nowHM();
+    $("hoy").textContent = parseISO(hoy).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+    $("turno-hoy").textContent = laborable(hoy) ? `Turno ${etiqueta(turnoDe(hoy))}` : "Fin de semana o festivo";
+
+    const p = $("btn-principal"), s = $("btn-salir"), est = $("estado");
+    if (!S.jornadas.size && !uid) return;
+
+    if (!op) {
+      const hr = S.jornadas.get(hoy);
+      if (hr && hr.tipo && hr.tipo !== "trabajo") {
+        p.textContent = "Entrar"; p.disabled = true;
+        est.textContent = `Hoy tienes registrada una ${TIPOS_AUS[hr.tipo].toLowerCase()}.`;
+      } else if (hr && hr.entrada && hr.salida) {
+        p.textContent = "Entrar"; p.disabled = true;
+        est.innerHTML = `Jornada de hoy cerrada: <strong class="num">${hTxt(clasificar(hoy, hr, S).worked)}</strong>. Corrígela desde "Corregir hoy" si hace falta.`;
+      } else {
+        p.textContent = "Entrar"; p.disabled = S.busy;
+        est.textContent = "Sin jornada abierta. Pulsa Entrar al empezar tu turno.";
+      }
+      s.disabled = true;
+    } else if (enPausa) {
+      p.textContent = "Fin de pausa"; p.disabled = S.busy;
+      s.disabled = true;
+      est.innerHTML = `En pausa desde <strong class="num">${r.pausaIni}</strong>.`;
+    } else if (!r.pausaIni) {
+      p.textContent = "Pausa para comer"; p.disabled = S.busy;
+      s.disabled = S.busy;
+      est.innerHTML = `En jornada desde <strong class="num">${r.entrada}</strong>${op !== hoy ? ` (${label(op)})` : ""}.`;
+    } else {
+      p.textContent = "Entrar"; p.disabled = true;
+      s.disabled = S.busy;
+      est.innerHTML = `En jornada desde <strong class="num">${r.entrada}</strong>${op !== hoy ? ` (${label(op)})` : ""}. Pulsa Salir al terminar.`;
+    }
+  }
+
+  const etiqueta = t => ({ manana: "mañana", tarde: "tarde", partida: "partida" })[t] || "—";
+  const turnoDe = s => S.semanas.get(mondayOf(s))?.turno || turnoBase(mondayOf(s));
+
+  function renderTurno() {
+    const lunes = mondayOf(todayISO());
+    const domingo = addDays(lunes, 6);
+    $("semana-rango").textContent = `${label(lunes)} – ${label(domingo)}`;
+    const t = turnoDe(lunes);
+    const ov = S.semanas.get(lunes)?.turno;
+    $("semana-turno").textContent = `${etiqueta(t)}${ov ? " (fijado)" : " (rotación)"}`;
+    $("sel-turno").value = ov || "auto";
+  }
+
+  function renderCalendario() {
+    const [y, m] = S.mes.split("-").map(Number);
+    $("mes-titulo").textContent = new Date(y, m - 1, 1).toLocaleDateString("es-ES", { month: "long", year: "numeric" });
+    const cab = $("cal-cab"); cab.textContent = "";
+    for (const d of ["L", "M", "X", "J", "V", "S", "D"]) {
+      const e = document.createElement("div"); e.className = "wd"; e.textContent = d; cab.append(e);
+    }
+    const cal = $("cal"); cal.textContent = "";
+    const first = new Date(y, m - 1, 1);
+    const offset = (first.getDay() + 6) % 7;
+    const dias = new Date(y, m, 0).getDate();
+    const hoy = todayISO();
+    for (let i = 0; i < offset; i++) {
+      const v = document.createElement("div"); v.className = "day void"; cal.append(v);
+    }
+    for (let d = 1; d <= dias; d++) {
+      const id = `${y}-${pad(m)}-${pad(d)}`;
+      const r = S.jornadas.get(id);
+      const c = clasificar(id, r, S);
+      let cls = "", sub = "";
+      if (r && r.tipo && r.tipo !== "trabajo") { cls = "aus"; sub = TIPOS_AUS[r.tipo][0]; }
+      else if (c.abierto) { cls = "abierto"; }
+      else if (c.cerrado) {
+        cls = c.fest > 0 ? "fest" : c.noct > 0 ? "noct" : c.extra > 0 ? "extra" : "normal";
+        sub = hDec(c.worked) + "h";
+      } else if (FESTIVOS.has(id)) { cls = "festivo"; }
+      else if (esFin(id)) { cls = "libre"; }
+      if (!cls && laborable(id)) sub = etiqueta(turnoDe(id))[0].toUpperCase();
+      if (cls === "festivo" || cls === "libre") sub = "";
+
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `day ${cls}${id === hoy ? " today" : ""}`;
+      b.setAttribute("aria-label", `${label(id)}${r ? "" : ", sin registro"}`);
+      const n = document.createElement("span"); n.className = "n"; n.textContent = d;
+      const s = document.createElement("span"); s.className = "s"; s.textContent = sub;
+      b.append(n, s);
+      b.addEventListener("click", () => openEditor(id));
+      cal.append(b);
+    }
+  }
+
+  function renderResumen() {
+    const mes = S.mes;
+    let norm = 0, ext = 0, noct = 0, fest = 0, trab = 0, saldoMes = 0, saldoTot = 0, dias = 0, abiertas = 0;
+    const aus = { vacaciones: 0, permiso: 0, baja: 0, otra: 0 };
+    for (const [id, r] of S.jornadas) {
+      const c = clasificar(id, r, S);
+      if (c.cerrado && !c.ausencia) saldoTot += c.saldo;
+      if (!id.startsWith(mes)) continue;
+      if (c.ausencia) { aus[r.tipo] = (aus[r.tipo] || 0) + 1; continue; }
+      if (c.abierto) { abiertas++; continue; }
+      if (!c.cerrado) continue;
+      dias++; norm += c.normal; ext += c.extra; noct += c.noct; fest += c.fest; trab += c.worked; saldoMes += c.saldo;
+    }
+    // Saldo total también debe incluir días de ausencia (saldo 0) y excluir abiertos: ya queda incluido.
+    $("s-trab").textContent = hTxt(trab);
+    $("s-norm").textContent = hTxt(norm);
+    $("s-ext").textContent = hTxt(ext);
+    $("s-noc").textContent = hTxt(noct);
+    $("s-fest").textContent = hTxt(fest);
+    const nAus = aus.vacaciones + aus.permiso + aus.baja + aus.otra;
+    $("s-aus").textContent = `${nAus} días`;
+    const sm = $("s-mes"); sm.textContent = hTxt(saldoMes, true); sm.className = `val num ${saldoMes >= 0 ? "pos" : "neg"}`;
+    const st = $("s-total"); st.textContent = hTxt(saldoTot, true); st.className = `val num ${saldoTot >= 0 ? "pos" : "neg"}`;
+    const extra = [];
+    if (aus.vacaciones) extra.push(`vacaciones ${aus.vacaciones}`);
+    if (aus.permiso) extra.push(`permisos ${aus.permiso}`);
+    if (aus.baja) extra.push(`bajas ${aus.baja}`);
+    if (aus.otra) extra.push(`otras ${aus.otra}`);
+    $("s-pie").textContent = `${dias} jornadas cerradas${abiertas ? ` · ${abiertas} abierta` : ""}${extra.length ? ` · ${extra.join(", ")}` : ""}`;
+  }
+
+  function renderDetalle() {
+    const lista = $("lista"); lista.textContent = "";
+    if (!uid) return;
+    const ids = [...S.jornadas.keys()].filter(id => id.startsWith(S.mes)).sort();
+    if (!ids.length) { lista.innerHTML = `<div class="empty">Sin registros este mes.</div>`; return; }
+    for (const id of ids.reverse()) {
+      const r = S.jornadas.get(id);
+      const c = clasificar(id, r, S);
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.className = "row";
+      btn.setAttribute("aria-label", `Editar ${label(id)}`);
+      const left = document.createElement("span");
+      const d = document.createElement("div"); d.className = "d"; d.textContent = label(id);
+      const t = document.createElement("div"); t.className = "t";
+      if (c.ausencia) t.textContent = TIPOS_AUS[r.tipo];
+      else if (c.abierto) t.textContent = `${r.entrada} → abierta${r.pausaIni ? ` · pausa desde ${r.pausaIni}` : ""}`;
+      else t.textContent = `${r.entrada} → ${r.salida}${r.pausaIni && r.pausaFin ? ` · pausa ${r.pausaIni}–${r.pausaFin}` : ""}`;
+      left.append(d, t);
+      const right = document.createElement("span"); right.className = "r";
+      if (c.ausencia) {
+        const w = document.createElement("span"); w.className = "w"; w.textContent = "8 h";
+        const e = document.createElement("span"); e.className = "muted"; e.textContent = "neutral";
+        right.append(w, e);
+      } else if (c.cerrado) {
+        const w = document.createElement("span"); w.className = "w"; w.textContent = hTxt(c.worked);
+        const parts = [];
+        if (c.normal) parts.push(`normal ${hDec(c.normal)}`);
+        if (c.extra) parts.push(`extra ${hDec(c.extra)}`);
+        if (c.noct) parts.push(`noct. ${hDec(c.noct)}`);
+        if (c.fest) parts.push(`fin/fest. ${hDec(c.fest)}`);
+        const e = document.createElement("span");
+        e.className = c.saldo >= 0 ? "pos" : "neg";
+        e.textContent = `saldo ${hTxt(c.saldo, true)}`;
+        const p = document.createElement("span"); p.className = "muted"; p.textContent = parts.join(" · ");
+        right.append(w, e, p);
+      } else {
+        const tg = document.createElement("span"); tg.className = "neg"; tg.textContent = "Sin cerrar";
+        right.append(tg);
+      }
+      btn.append(left, right);
+      btn.addEventListener("click", () => openEditor(id));
+      lista.append(btn);
+    }
+  }
+
+  function renderAll() {
+    renderMarcaje(); renderTurno(); renderCalendario(); renderResumen(); renderDetalle();
+  }
+
+  // ============ ACCIONES ============
+  function todayISO() { return iso(new Date()); }
+
+  async function guardar(id, data) {
+    S.busy = true; renderMarcaje();
+    try {
+      await setDoc(doc(db, "users", uid, "jornadas", id), data);
+      return true;
+    } catch (e) {
+      toast(`No se pudo guardar: ${e.code || e.message}`);
+      return false;
+    } finally {
+      S.busy = false; renderMarcaje();
+    }
+  }
+
+  async function accionPrincipal() {
+    const hoy = todayISO();
+    const op = abierta();
+    if (!op) {
+      const hr = S.jornadas.get(hoy) || {};
+      if (await guardar(hoy, { fecha: hoy, tipo: "trabajo", entrada: nowHM(), pausaIni: "", pausaFin: "", salida: "" }))
+        toast(`Entrada registrada a las ${nowHM()}`);
+      return;
+    }
+    const r = S.jornadas.get(op);
+    if (!r.pausaIni) {
+      const h = nowHM();
+      if (await guardar(op, { ...r, pausaIni: h })) toast(`Pausa iniciada a las ${h}`);
+    } else if (!r.pausaFin) {
+      const h = nowHM();
+      if (await guardar(op, { ...r, pausaFin: h })) toast(`Fin de pausa a las ${h}`);
+    }
+  }
+
+  async function accionSalir() {
+    const op = abierta();
+    if (!op) { toast("No hay ninguna jornada abierta."); return; }
+    const h = nowHM();
+    if (await guardar(op, { ...S.jornadas.get(op), salida: h })) toast(`Salida registrada a las ${h}`);
+  }
+
+  // ============ EDITOR ============
+  function openEditor(id) {
+    S.editId = id;
+    const existe = S.jornadas.get(id);
+    const r = existe || {};
+    $("dlg-titulo").textContent = existe ? "Editar" : "Nuevo registro";
+    $("f-fecha").value = id;
+    $("f-fecha").readOnly = !!existe;
+    $("f-tipo").value = r.tipo || "trabajo";
+    $("f-entrada").value = r.entrada || "";
+    $("f-salida").value = r.salida || "";
+    $("f-pini").value = r.pausaIni || "";
+    $("f-pfin").value = r.pausaFin || "";
+    $("f-borrar").hidden = !existe;
+    $("f-borrar").textContent = "Borrar";
+    S.confirmDel = false;
+    ajustarTipo();
+    $("f-err").textContent = "";
+    $("dlg").showModal();
+  }
+  function ajustarTipo() { $("bloque-horas").hidden = $("f-tipo").value !== "trabajo"; }
+  function cerrarEditor() { $("dlg").close(); S.editId = null; }
+
+  $("f-tipo").addEventListener("change", ajustarTipo);
+
+  $("form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const fecha = $("f-fecha").value;
+    const tipo = $("f-tipo").value;
+    const err = $("f-err");
+    if (!fecha) { err.textContent = "Indica la fecha."; return; }
+    if (!S.editId && S.jornadas.has(fecha)) { err.textContent = "Ya existe un registro para esa fecha. Edítalo desde el calendario."; return; }
+    let data;
+    if (tipo === "trabajo") {
+      const entrada = $("f-entrada").value, salida = $("f-salida").value;
+      const pini = $("f-pini").value, pfin = $("f-pfin").value;
+      if (!entrada) { err.textContent = "Indica la hora de entrada."; return; }
+      if (!!pini !== !!pfin) { err.textContent = "Para una pausa indica inicio y fin."; return; }
+      if (salida && salida === entrada) { err.textContent = "La salida no puede coincidir con la entrada."; return; }
+      data = { fecha, tipo, entrada, salida, pausaIni: pini, pausaFin: pfin };
+    } else {
+      data = { fecha, tipo, entrada: "", salida: "", pausaIni: "", pausaFin: "" };
+    }
+    err.textContent = "";
+    if (await guardar(fecha, data)) { cerrarEditor(); toast("Guardado"); }
+  });
+
+  $("f-borrar").addEventListener("click", async () => {
+    const btn = $("f-borrar");
+    if (!S.confirmDel) {
+      S.confirmDel = true; btn.textContent = "Pulsa otra vez para borrar";
+      setTimeout(() => { S.confirmDel = false; btn.textContent = "Borrar"; }, 4000);
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, "users", uid, "jornadas", S.editId));
+      cerrarEditor(); toast("Registro borrado");
+    } catch (e) { $("f-err").textContent = `No se pudo borrar: ${e.code || e.message}`; }
+  });
+  $("f-cancelar").addEventListener("click", cerrarEditor);
+  $("dlg").addEventListener("click", e => { if (e.target === $("dlg")) cerrarEditor(); });
+
+  // ============ TURNO DE LA SEMANA ============
+  $("sel-turno").addEventListener("change", async e => {
+    const lunes = mondayOf(todayISO());
+    try {
+      if (e.target.value === "auto") await deleteDoc(doc(db, "users", uid, "semanas", lunes));
+      else await setDoc(doc(db, "users", uid, "semanas", lunes), { lunes, turno: e.target.value });
+      toast("Turno de la semana actualizado");
+    } catch (err) { toast(`No se pudo guardar: ${err.code || err.message}`); }
+  });
+
+  // ============ CSV ============
+  $("btn-csv").addEventListener("click", () => {
+    const ids = [...S.jornadas.keys()].filter(id => id.startsWith(S.mes)).sort();
+    const cab = ["Fecha", "Día", "Tipo", "Entrada", "Pausa inicio", "Pausa fin", "Salida",
+                 "Normal (h)", "Extra normal (h)", "Nocturna (h)", "Fin de semana y festivo (h)", "Trabajadas (h)", "Saldo (h)"];
+    const filas = [cab.join(";")];
+    for (const id of ids) {
+      const r = S.jornadas.get(id);
+      const c = clasificar(id, r, S);
+      const tipo = r.tipo && r.tipo !== "trabajo" ? TIPOS_AUS[r.tipo] : (c.abierto ? "Abierta" : "Trabajo");
+      filas.push([id, parseISO(id).toLocaleDateString("es-ES", { weekday: "long" }), tipo,
+        r.entrada || "", r.pausaIni || "", r.pausaFin || "", r.salida || "",
+        c.cerrado && !c.ausencia ? hDec(c.normal) : "", c.cerrado && !c.ausencia ? hDec(c.extra) : "",
+        c.cerrado && !c.ausencia ? hDec(c.noct) : "", c.cerrado && !c.ausencia ? hDec(c.fest) : "",
+        c.cerrado && !c.ausencia ? hDec(c.worked) : "", c.cerrado && !c.ausencia ? hDec(c.saldo) : ""].join(";"));
+    }
+    const blob = new Blob(["﻿" + filas.join("\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `jornada-${S.mes}.csv`;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  // ============ NAVEGACIÓN DE MESES ============
+  function moverMes(delta) {
+    const [y, m] = S.mes.split("-").map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    S.mes = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+    renderCalendario(); renderResumen(); renderDetalle();
+  }
+  $("mes-ant").addEventListener("click", () => moverMes(-1));
+  $("mes-sig").addEventListener("click", () => moverMes(1));
+
+  $("btn-principal").addEventListener("click", accionPrincipal);
+  $("btn-salir").addEventListener("click", accionSalir);
+  $("btn-corregir").addEventListener("click", () => openEditor(todayISO()));
+
+  // ============ SESIÓN ============
+  function mostrar(vista) {
+    $("login").hidden = vista !== "login";
+    $("main").hidden = vista !== "app";
+    $("quien").hidden = vista !== "app";
+  }
+
+  function suscribir() {
+    S.jornadas = new Map(); S.semanas = new Map();
+    unsubJ = onSnapshot(collection(db, "users", uid, "jornadas"),
+      snap => { S.jornadas = new Map(snap.docs.map(d => [d.id, d.data()])); notice(""); renderAll(); },
+      err => notice(`Error al leer las jornadas: ${err.code || err.message}`));
+    unsubS = onSnapshot(collection(db, "users", uid, "semanas"),
+      snap => { S.semanas = new Map(snap.docs.map(d => [d.id, d.data()])); renderAll(); },
+      err => notice(`Error al leer los turnos: ${err.code || err.message}`));
+  }
+
+  const configurado = firebaseConfig.apiKey !== "PEGAR_AQUI";
+  S.mes = todayISO().slice(0, 7);
+
+  if (!configurado) {
+    mostrar("login");
+    $("login").innerHTML = `<h2>Configuración pendiente</h2><p class="muted small" style="margin:0">Falta pegar la configuración de Firebase en el archivo index.html.</p>`;
+    $("btn-login")?.remove?.();
+  } else {
+    const app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = initializeFirestore(app, { localCache: persistentLocalCache() });
+
+    $("btn-login").addEventListener("click", () => {
+      signInWithPopup(auth, new GoogleAuthProvider()).catch(e => notice(`No se pudo iniciar sesión: ${e.code || e.message}`));
+    });
+    $("btn-salir-sesion").addEventListener("click", () => signOut(auth));
+
+    onAuthStateChanged(auth, user => {
+      if (unsubJ) { unsubJ(); unsubJ = null; }
+      if (unsubS) { unsubS(); unsubS = null; }
+      if (user) {
+        uid = user.uid;
+        $("email").textContent = user.email || "";
+        mostrar("app");
+        suscribir();
+      } else {
+        uid = null;
+        mostrar("login");
+      }
+      renderAll();
+    });
+  }
+
+  setInterval(() => { if (uid) renderMarcaje(); }, 30000);
+  renderAll();
+</script>
+</body>
+</html>

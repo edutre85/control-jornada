@@ -455,13 +455,22 @@
   const NOCT_DESDE = 22 * 60, NOCT_HASTA = 6 * 60;  // franja nocturna 22:00–06:00
   const VENTANA = { manana: [360, 840], tarde: [840, 1320], partida: [480, 990] };
   // Ciclo de rotación: la semana del 16 de noviembre de 2026 es de tarde; las semanas alternan.
-  const ANCLA = { lunes: "2026-11-16", turno: "tarde" };
+  // Ciclos de rotación: cada uno arranca en su semana y alterna mañanas y tardes.
+  const ANCLAS = [
+    { lunes: "2026-11-16", turno: "tarde" },
+    { lunes: "2027-01-04", turno: "tarde" }
+  ];
   // Festivos 2026 (rojo, azul y verde del calendario laboral).
   const FESTIVOS = new Set([
     "2026-01-01","2026-01-05","2026-01-06","2026-04-02","2026-04-03","2026-04-23",
     "2026-05-01","2026-07-13","2026-07-14","2026-08-15","2026-10-12","2026-11-01",
     "2026-11-02","2026-12-06","2026-12-07","2026-12-08","2026-12-21","2026-12-22",
-    "2026-12-23","2026-12-24","2026-12-25","2026-12-28","2026-12-29","2026-12-30","2026-12-31"
+    "2026-12-23","2026-12-24","2026-12-25","2026-12-28","2026-12-29","2026-12-30","2026-12-31",
+    // 2027: festivos (12 nacionales y autonómicos + 2 locales) y días de exceso de horas (10)
+    "2027-01-01","2027-01-06","2027-03-26","2027-03-29","2027-03-30","2027-04-23","2027-05-01",
+    "2027-07-12","2027-08-15","2027-10-11","2027-10-12","2027-11-01","2027-12-06","2027-12-08",
+    "2027-12-21","2027-12-22","2027-12-23","2027-12-24","2027-12-25","2027-12-27","2027-12-28",
+    "2027-12-29","2027-12-30","2027-12-31"
   ]);
   const TIPOS_AUS = { vacaciones: "Vacaciones", permiso: "Permiso", baja: "Baja", otra: "Ausencia", falta: "Sin fichaje" };
 
@@ -485,9 +494,11 @@
   const esFestivo = s => FESTIVOS.has(s) || esFin(s);
   const laborable = s => !esFestivo(s);
   const turnoBase = lunes => {
-    const semanas = Math.round((parseISO(lunes) - parseISO(ANCLA.lunes)) / 604800000);
+    let a = ANCLAS[0];
+    for (const x of ANCLAS) if (x.lunes <= lunes) a = x;
+    const semanas = Math.round((parseISO(lunes) - parseISO(a.lunes)) / 604800000);
     const par = ((semanas % 2) + 2) % 2 === 0;
-    return par ? ANCLA.turno : (ANCLA.turno === "tarde" ? "manana" : "tarde");
+    return par ? a.turno : (a.turno === "tarde" ? "manana" : "tarde");
   };
 
   // ============ CLASIFICACIÓN ============
